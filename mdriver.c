@@ -23,19 +23,12 @@
 
 #include <dlfcn.h>
 
-static void *(*libc_malloc)(size_t) = NULL;
-static void (*libc_free)(void *) = NULL;
-static void *(*libc_realloc)(void *, size_t) = NULL;
-static void *(*libc_calloc)(size_t, size_t) = NULL;
 
-static void init_libc_funcs() {
-    if (!libc_malloc) {
-        libc_malloc = dlsym(RTLD_NEXT, "malloc");
-        libc_free = dlsym(RTLD_NEXT, "free");
-        libc_realloc = dlsym(RTLD_NEXT, "realloc");
-        libc_calloc = dlsym(RTLD_NEXT, "calloc");
-    }
-}
+
+
+
+
+
 
 
 /**********************
@@ -48,7 +41,7 @@ static void init_libc_funcs() {
 #define LINENUM(i) (i+5) /* cnvt trace request nums to linenums (origin 1) */
 
 /* Returns true if p is ALIGNMENT-byte aligned */
-#define IS_ALIGNED(p)  ((((unsigned int)(p)) % ALIGNMENT) == 0)
+#define IS_ALIGNED(p)  ((((size_t)(p)) % ALIGNMENT) == 0)
 
 /****************************** 
  * The key compound data types 
@@ -113,9 +106,7 @@ char msg[MAXLINE];      /* for whenever we need to compose an error message */
 static char tracedir[MAXLINE] = TRACEDIR;
 
 /* The filenames of the default tracefiles */
-static char *default_tracefiles[] = {  
-    DEFAULT_TRACEFILES, NULL
-};
+
 
 
 /********************* 
@@ -133,8 +124,8 @@ static trace_t *read_trace(char *tracedir, char *filename);
 static void free_trace(trace_t *trace);
 
 /* Routines for evaluating the correctness and speed of libc malloc */
-static int eval_libc_valid(trace_t *trace, int tracenum);
-static void eval_libc_speed(void *ptr);
+
+
 
 /* Routines for evaluating correctnes, space utilization, and speed 
    of the student's malloc package in mm.c */
@@ -160,7 +151,7 @@ int main(int argc, char **argv)
     int num_tracefiles = 0;    /* the number of traces in that array */
     trace_t *trace = NULL;     /* stores a single trace file in memory */
     range_t *ranges = NULL;    /* keeps track of block extents for one trace */
-    stats_t *libc_stats = NULL;/* libc stats for each trace */
+    
     stats_t *mm_stats = NULL;  /* mm (i.e. student) stats for each trace */
     speed_t speed_params;      /* input parameters to the xx_speed routines */ 
 
@@ -403,13 +394,10 @@ static void remove_range(range_t **ranges, char *lo)
 {
     range_t *p;
     range_t **prevpp = ranges;
-    int size;
 
     for (p = *ranges;  p != NULL; p = p->next) {
         if (p->lo == lo) {
 	    *prevpp = p->next;
-            size = p->hi - p->lo + 1;
-            free(p);
             break;
         }
         prevpp = &(p->next);
@@ -473,9 +461,9 @@ static trace_t *read_trace(char *tracedir, char *filename)
 
     /* Read the trace file header */
     if (fscanf(tracefile, "%d", &(trace->sugg_heapsize)) == EOF) return NULL; /* not used */
-    fscanf(tracefile, "%d", &(trace->num_ids));
-    fscanf(tracefile, "%d", &(trace->num_ops));
-    fscanf(tracefile, "%d", &(trace->weight));        /* not used */
+    if(fscanf(tracefile, "%d", &(trace->num_ids))){}
+    if(fscanf(tracefile, "%d", &(trace->num_ops))){}
+    if(fscanf(tracefile, "%d", &(trace->weight))){}        /* not used */
 
     /* We'll store each request line in the trace in this array */
     if ((trace->ops =
@@ -498,21 +486,21 @@ static trace_t *read_trace(char *tracedir, char *filename)
     while (fscanf(tracefile, "%s", type) != EOF) {
         switch(type[0]) {
         case 'a':
-            fscanf(tracefile, "%u %u", &index, &size);
+            if(fscanf(tracefile, "%u %u", &index, &size)){}
             trace->ops[op_index].type = ALLOC;
             trace->ops[op_index].index = index;
             trace->ops[op_index].size = size;
             max_index = (index > max_index) ? index : max_index;
             break;
         case 'r':
-            fscanf(tracefile, "%u %u", &index, &size);
+            if(fscanf(tracefile, "%u %u", &index, &size)){}
             trace->ops[op_index].type = REALLOC;
             trace->ops[op_index].index = index;
             trace->ops[op_index].size = size;
             max_index = (index > max_index) ? index : max_index;
             break;
         case 'f':
-            fscanf(tracefile, "%ud", &index);
+            if(fscanf(tracefile, "%ud", &index)){}
             trace->ops[op_index].type = FREE;
             trace->ops[op_index].index = index;
             break;
@@ -808,84 +796,14 @@ static void eval_mm_speed(void *ptr)
  *    We'll be conservative and terminate if any libc malloc call fails.
  *
  */
-static int eval_libc_valid(trace_t *trace, int tracenum)
-{
-    int i, newsize;
-    char *p, *newp, *oldp;
 
-    for (i = 0;  i < trace->num_ops;  i++) {
-        switch (trace->ops[i].type) {
-
-        case ALLOC: /* malloc */
-	    if ((p = malloc(trace->ops[i].size)) == NULL) {
-		malloc_error(tracenum, i, "libc malloc failed");
-		unix_error("System message");
-	    }
-	    trace->blocks[trace->ops[i].index] = p;
-	    break;
-
-	case REALLOC: /* realloc */
-            newsize = trace->ops[i].size;
-	    oldp = trace->blocks[trace->ops[i].index];
-	    if ((newp = realloc(oldp, newsize)) == NULL) {
-		malloc_error(tracenum, i, "libc realloc failed");
-		unix_error("System message");
-	    }
-	    trace->blocks[trace->ops[i].index] = newp;
-	    break;
-	    
-        case FREE: /* free */
-	    free(trace->blocks[trace->ops[i].index]);
-	    break;
-
-	default:
-	    app_error("invalid operation type  in eval_libc_valid");
-	}
-    }
-
-    return 1;
-}
 
 /* 
  * eval_libc_speed - This is the function that is used by fcyc() to
  *    measure the running time of the libc malloc package on the set
  *    of traces.
  */
-static void eval_libc_speed(void *ptr)
-{
-    int i;
-    int index, size, newsize;
-    char *p, *newp, *oldp, *block;
-    trace_t *trace = ((speed_t *)ptr)->trace;
 
-    for (i = 0;  i < trace->num_ops;  i++) {
-        switch (trace->ops[i].type) {
-        case ALLOC: /* malloc */
-	    index = trace->ops[i].index;
-	    size = trace->ops[i].size;
-	    if ((p = malloc(size)) == NULL)
-		unix_error("malloc failed in eval_libc_speed");
-	    trace->blocks[index] = p;
-	    break;
-
-	case REALLOC: /* realloc */
-	    index = trace->ops[i].index;
-	    newsize = trace->ops[i].size;
-	    oldp = trace->blocks[index];
-	    if ((newp = realloc(oldp, newsize)) == NULL)
-		unix_error("realloc failed in eval_libc_speed\n");
-	    
-	    trace->blocks[index] = newp;
-	    break;
-	    
-        case FREE: /* free */
-	    index = trace->ops[i].index;
-	    block = trace->blocks[index];
-	    free(block);
-	    break;
-	}
-    }
-}
 
 /*************************************
  * Some miscellaneous helper routines

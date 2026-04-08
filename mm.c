@@ -19,8 +19,10 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "mm.h"
 #include "memlib.h"
+#include "mm.h"
+
+int mm_checkheap(int verbose);
 
 // Create aliases for driver tests
 // DO NOT CHANGE THE FOLLOWING!
@@ -96,12 +98,12 @@ int checkFreeList(void);
  */
 
 // Align p to a multiple of w bytes
-static inline void* align(const void const* p, unsigned char w) {
+static inline void* align(const void * p, unsigned char w) {
     return (void*)(((uintptr_t)(p) + (w-1)) & ~(w-1));
 }
 
 // Check if the given pointer is 8-byte aligned
-static inline int aligned(const void const* p) {
+static inline int aligned(const void * p) {
     return align(p, 8) == p;
 }
 
